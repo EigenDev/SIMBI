@@ -6,12 +6,19 @@
  * Compressible Hydro Simulation
  */
 
-#include "helper_functions.h"
-#include "srhd_2d.h"
+
+
 #include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <iomanip>
+#include <numeric> 
+#include <execution> 
+#include <mutex> 
+#include <thread> 
+
+#include "srhd_2d.h"
+#include "helper_functions.h"
 
 using namespace std;
 using namespace simbi;
@@ -70,7 +77,7 @@ vector<Primitive> SRHD2D::cons2prim2D(const vector<Conserved> &u_state2D)
     double W, v1, v2;
 
     vector<Primitive> prims;
-    prims.reserve(nzones);
+    prims.resize(nzones);
 
     // Define Newton-Raphson Vars
     double etotal, c2, f, g, p, peq;
@@ -78,72 +85,79 @@ vector<Primitive> SRHD2D::cons2prim2D(const vector<Conserved> &u_state2D)
 
     int iter = 0;
     int maximum_iteration = 50;
-    for (int jj = 0; jj < NY; jj++)
-    {
-        for (int ii = 0; ii < NX; ii++)
-        {
-            D   = u_state2D [ii + NX * jj].D;     // Relativistic Mass Density
-            S1  = u_state2D [ii + NX * jj].S1;   // X1-Momentum Denity
-            S2  = u_state2D [ii + NX * jj].S2;   // X2-Momentum Density
-            tau = u_state2D [ii + NX * jj].tau; // Energy Density
-            S = sqrt(S1 * S1 + S2 * S2);
 
-            peq = (n != 0.0) ? pressure_guess[ii + NX * jj] : abs(S - D - tau);
-
-            tol = D * 1.e-12;
-
-            //--------- Iteratively Solve for Pressure using Newton-Raphson
-            // Note: The NR scheme can be modified based on:
-            // https://www.sciencedirect.com/science/article/pii/S0893965913002930
-            iter = 0;
-            do
+    std::mutex j_guard;
+    std::thread_pool pool{ std::thread::hardware_concurrency() };
+    int nthreads = std::thread::hardware_concurrency();
+    vector<std::thread> pool(nthreads);
+    auto exec = pool.executor();
+    // #pragma omp parallel for 
+    std::for_each(std::execution::par.on(exec),
+        jgp.begin(),
+        jgp.end(),
+        [&](int &jj)
+        {   
+            std::lock_guard<std::mutex> guard(j_guard);
+            std::for_each(igp.begin(), igp.end(), [&](int &ii)
             {
-                p = peq;
-                etotal = tau + p + D;
-                v2 = S * S / (etotal * etotal);
-                Ws = 1.0 / sqrt(1.0 - v2);
-                rhos = D / Ws;
-                eps = (tau + D * (1. - Ws) + (1. - Ws * Ws) * p) / (D * Ws);
-                f = (gamma - 1.0) * rhos * eps - p;
+                D   = u_state2D [ii + NX * jj].D;     // Relativistic Mass Density
+                S1  = u_state2D [ii + NX * jj].S1;    // X1-Momentum Denity
+                S2  = u_state2D [ii + NX * jj].S2;    // X2-Momentum Density
+                tau = u_state2D [ii + NX * jj].tau;   // Energy Density
+                S = sqrt(S1 * S1 + S2 * S2);
 
-                h = 1. + eps + p / rhos;
-                c2 = gamma * p / (h * rhos);
-                g = c2 * v2 - 1.0;
-                peq = p - f / g;
-                iter++;
+                peq = (n != 0.0) ? pressure_guess[ii + NX * jj] : abs(S - D - tau);
 
-                if (iter > maximum_iteration)
+                tol = D * 1.e-12;
+
+                //--------- Iteratively Solve for Pressure using Newton-Raphson
+                // Note: The NR scheme can be modified based on:
+                // https://www.sciencedirect.com/science/article/pii/S0893965913002930
+                iter = 0;
+                do
                 {
-                    cout << "\n";
-                    cout << "p: " << p << endl;
-                    cout << "S: " << S << endl;
-                    cout << "tau: " << tau << endl;
-                    cout << "D: " << D << endl;
-                    cout << "et: " << etotal << endl;
-                    cout << "Ws: " << Ws << endl;
-                    cout << "v2: " << v2 << endl;
-                    cout << "W: " << W << endl;
-                    cout << "n: " << n << endl;
-                    cout << "\n Cons2Prim Cannot Converge" << endl;
-                    exit(EXIT_FAILURE);
-                }
+                    p = peq;
+                    etotal = tau + p + D;
+                    v2 = S * S / (etotal * etotal);
+                    Ws = 1.0 / sqrt(1.0 - v2);
+                    rhos = D / Ws;
+                    eps = (tau + D * (1. - Ws) + (1. - Ws * Ws) * p) / (D * Ws);
+                    f = (gamma - 1.0) * rhos * eps - p;
 
-            } while (abs(peq - p) >= tol);
-        
+                    h = 1. + eps + p / rhos;
+                    c2 = gamma * p / (h * rhos);
+                    g = c2 * v2 - 1.0;
+                    peq = p - f / g;
+                    iter++;
 
-            v1 = S1 / (tau + D + peq);
-            v2 = S2 / (tau + D + peq);
-            Ws = 1.0 / sqrt(1.0 - (v1 * v1 + v2 * v2));
+                    if (iter > maximum_iteration)
+                    {
+                        cout << "\n";
+                        cout << "p: " << p << endl;
+                        cout << "S: " << S << endl;
+                        cout << "tau: " << tau << endl;
+                        cout << "D: " << D << endl;
+                        cout << "et: " << etotal << endl;
+                        cout << "Ws: " << Ws << endl;
+                        cout << "v2: " << v2 << endl;
+                        cout << "W: " << W << endl;
+                        cout << "n: " << n << endl;
+                        cout << "\n Cons2Prim Cannot Converge" << endl;
+                        exit(EXIT_FAILURE);
+                    }
 
-            // Update the Gamma array
-            // lorentz_gamma[ii + NX * jj] = Ws;
+                } while (abs(peq - p) >= tol);
+            
+                v1 = S1 / (tau + D + peq);
+                v2 = S2 / (tau + D + peq);
+                Ws = 1.0 / sqrt(1.0 - (v1 * v1 + v2 * v2));
 
-            // Update the pressure guess for the next time step
-            pressure_guess[ii + NX * jj] = peq;
+                // Update the pressure guess for the next time step
+                pressure_guess[ii + NX * jj] = peq;
 
-            prims.push_back(Primitive(D / Ws, v1, v2, peq));
-        }
-    }
+                prims[jj * NX + ii] = Primitive(D / Ws, v1, v2, peq);
+            });
+        });
 
     return prims;
 };
@@ -1041,7 +1055,10 @@ vector<Conserved> SRHD2D::u_dot2D(const vector<Conserved> &u_state)
             }
         }
         else
-        {
+        {   
+            //define central enthalpy and relativisitc gamma factor
+            double hc, lg2; 
+
             bool at_north_pole = false; 
             bool at_south_pole = false; 
             bool at_adjn_pole  = false;
@@ -1053,6 +1070,7 @@ vector<Conserved> SRHD2D::u_dot2D(const vector<Conserved> &u_state)
 
             // Left/Right artificial viscosity
             Conserved favl, favr;
+            // #pragma omp parallel for 
             for (int jj = j_start; jj < j_bound; jj++)
             {
                 ycoordinate = jj - 2;
@@ -1339,6 +1357,8 @@ vector<Conserved> SRHD2D::u_dot2D(const vector<Conserved> &u_state)
                     uc   = center.v1;
                     vc   = center.v2;
 
+                    hc = 1.0 + gamma * pc / (rhoc * (gamma - 1.0));
+                    lg2 = 1.0/(1.0 - (vc * vc + uc * uc));
                     // Compute the surface areas
                     // upper_tsurface = coord_lattice.x2_face_areas[(ycoordinate + 1)*xphysical_grid + xcoordinate];
                     // lower_tsurface = coord_lattice.x2_face_areas[ycoordinate * xphysical_grid + xcoordinate];
@@ -1356,17 +1376,18 @@ vector<Conserved> SRHD2D::u_dot2D(const vector<Conserved> &u_state)
                         -(f1.D * right_rsurface - f2.D * left_rsurface) / deltaV1 
                             - (g1.D * upper_tsurface - g2.D * lower_tsurface) / deltaV2 
                                 + sourceD[xcoordinate + xphysical_grid * ycoordinate] * decay_const,
+                                
 
                         // L(S1)
                         -(f1.S1 * right_rsurface - f2.S1 * left_rsurface) / deltaV1 
                             - (g1.S1 * upper_tsurface - g2.S1 * lower_tsurface) / deltaV2 
-                                + rhoc * vc * vc / volAvg + 2.0 * pc / volAvg 
+                                + rhoc * vc * vc * hc * lg2 / volAvg + 2.0 * pc / volAvg 
                                     + source_S1[xcoordinate + xphysical_grid * ycoordinate] * decay_const,
 
                         // L(S2)
                         -(f1.S2 * right_rsurface - f2.S2 * left_rsurface) / deltaV1 
                             - (g1.S2 * upper_tsurface - g2.S2 * lower_tsurface) / deltaV2
-                                -(rhoc * uc * vc / volAvg - pc * coord_lattice.cot[ycoordinate] / volAvg) 
+                                -(rhoc * uc * vc * hc * lg2 / volAvg - pc * coord_lattice.cot[ycoordinate] / volAvg) 
                                     + source_S2[xcoordinate + xphysical_grid * ycoordinate] * decay_const,
 
                         // L(tau)
@@ -1474,8 +1495,9 @@ vector<vector<double>> SRHD2D::simulate2D(
     setup.xmin = x1[0];
     setup.ymax = x2[yphysical_grid - 1];
     setup.ymin = x2[0];
-    setup.NX = NX;
-    setup.NY = NY;
+    setup.NX   = NX;
+    setup.NY   = NY;
+    setup.ad_gamma = gamma;
 
     vector<Conserved> u, udot, u1, u2, u_p;
     u.resize(nzones);
@@ -1490,6 +1512,17 @@ vector<vector<double>> SRHD2D::simulate2D(
     source_S1 = sources[1];
     source_S2 = sources[2];
     source_tau = sources[3];
+
+    // Experimenting with parallel looping over indices
+    ip.resize(xphysical_grid);
+    jp.resize(yphysical_grid);
+    igp.resize(NX);
+    jgp.resize(NY);
+    std::iota (ip.begin(),  ip.end(), 0 );
+    std::iota (jp.begin(),  jp.end(), 0 ); 
+    std::iota (jgp.begin(), jgp.end(), 0); 
+    std::iota (igp.begin(), igp.end(), 0); 
+    std::mutex j_real_mutex; // protects j_real 
 
     // Copy the state array into real & profile variables
     for (size_t i = 0; i < state2D[0].size(); i++)
@@ -1579,6 +1612,7 @@ vector<vector<double>> SRHD2D::simulate2D(
         tchunk = "000000";
         int tchunk_order_of_mag = 2;
         int time_order_of_mag, num_zeros;
+
         while (t < tend)
         {
             /* Compute the loop execution time */
@@ -1586,43 +1620,78 @@ vector<vector<double>> SRHD2D::simulate2D(
 
             udot = u_dot2D(u);
 
-            for (int jj = 0; jj < yphysical_grid; jj+=block_size)
+            std::for_each(std::execution::par_unseq,
+                jp.begin(),
+                jp.end(),
+                [&](int &jj) mutable
             {
-                for (int ii = 0; ii < xphysical_grid; ii+=block_size)
+                std::lock_guard<std::mutex> jguard(j_real_mutex);
+                j_real = jj + 2;
+                std::for_each(ip.begin(), ip.end(), [&](int &ii) mutable
                 {
-                    for(int y = jj; y < std::min(jj + block_size, yphysical_grid); y++){
-                        j_real = y + 2;
-                        for(int x = ii; x < std::min(ii + block_size, xphysical_grid); x++){
-                            i_real = x + 2;
-                            u1[i_real + NX * j_real] 
-                                = u[i_real + NX * j_real] + udot[x + xphysical_grid * y] * dt;
-                        }
-                    }
-                }
-            }
+                    i_real = ii + 2;
+                    u1[i_real + NX * j_real] 
+                        = u[i_real + NX * j_real] + udot[ii + xphysical_grid * jj] * dt;
+                });
+            });
+            // #pragma omp parallel for 
+            // for (int jj = 0; jj < yphysical_grid; jj+=block_size)
+            // {
+            //     for (int ii = 0; ii < xphysical_grid; ii+=block_size)
+            //     {
+            //         for(int y = jj; y < std::min(jj + block_size, yphysical_grid); y++){
+            //             j_real = y + 2;
+            //             for(int x = ii; x < std::min(ii + block_size, xphysical_grid); x++){
+            //                 i_real = x + 2;
+            //                 u1[i_real + NX * j_real] 
+            //                     = u[i_real + NX * j_real] + udot[x + xphysical_grid * y] * dt;
+            //             }
+            //         }
+            //     }
+            // }
 
             config_ghosts2D(u1, NX, NY, false);
             prims = cons2prim2D(u1);
             udot  = u_dot2D(u1);
 
-            for (int jj = 0; jj < yphysical_grid; jj+= block_size)
+            i_real = 0;
+            j_real = 0;
+            std::for_each(std::execution::par_unseq,
+                jp.begin(),
+                jp.end(),
+                [&](int &jj) mutable
             {
+                std::lock_guard<std::mutex> jguard(j_real_mutex);
                 j_real = jj + 2;
-                for (int ii = 0; ii < xphysical_grid; ii+= block_size)
+                std::for_each(ip.begin(), ip.end(), [&](int &ii) mutable
                 {
-                    for(int y = jj; y < std::min(jj + block_size, yphysical_grid); y++){
-                        j_real = y + 2;
-                        for(int x = ii; x < std::min(ii + block_size, xphysical_grid); x++){
-                            i_real = x + 2;
-                            // i_real = ii + 2;
-                            u2[i_real + NX * j_real] =  u [i_real + NX * j_real] * 0.5 +
-                                                        u1[i_real + NX * j_real] * 0.5 +
-                                                        udot[x + xphysical_grid * y] * 0.5 * dt;
-                        }
-                    }
+                    i_real = ii + 2;
+                    u2[i_real + NX * j_real] 
+                        = u [i_real + NX * j_real] * 0.5 +
+                          u1[i_real + NX * j_real] * 0.5  +
+                          udot[ii + xphysical_grid * jj] * dt;
+                });
+            });
+
+            // #pragma omp parallel for 
+            // for (int jj = 0; jj < yphysical_grid; jj+= block_size)
+            // {
+            //     j_real = jj + 2;
+            //     for (int ii = 0; ii < xphysical_grid; ii+= block_size)
+            //     {
+            //         for(int y = jj; y < std::min(jj + block_size, yphysical_grid); y++){
+            //             j_real = y + 2;
+            //             for(int x = ii; x < std::min(ii + block_size, xphysical_grid); x++){
+            //                 i_real = x + 2;
+            //                 // i_real = ii + 2;
+            //                 u2[i_real + NX * j_real] =  u [i_real + NX * j_real] * 0.5 +
+            //                                             u1[i_real + NX * j_real] * 0.5 +
+            //                                             udot[x + xphysical_grid * y] * 0.5 * dt;
+            //             }
+            //         }
                     
-                }
-            }
+            //     }
+            // }
 
             config_ghosts2D(u2, NX, NY, false);
             prims = cons2prim2D(u2);
@@ -1660,7 +1729,8 @@ vector<vector<double>> SRHD2D::simulate2D(
                     tchunk.insert(0, pad_zeros);
                     tchunk_order_of_mag += 1;
                 }
-                
+
+
                 transfer_prims = vecs2struct(prims);
                 toWritePrim(&transfer_prims, &prods);
                 tnow = create_step_str(t_interval, tchunk);

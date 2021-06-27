@@ -21,12 +21,15 @@ sourcefiles = ['src/state.pyx',
                'src/relativistic2D.cpp',
                'src/clattice.cpp',
                'src/hydro_structs.cpp',
-               'src/viscous_diff.cpp']
+               'src/viscous_diff.cpp',
+               'src/clattice_1d.cpp']
 
-extensions = [Extension("state", sourcefiles, 
+extensions = Extension("state", sourcefiles, 
                         include_dirs=[numpy.get_include(), "helper_functions.h"],
-                        libraries=['hdf5', 'hdf5_hl', 'hdf5_cpp'],
-                        extra_compile_args = ['-std=c++11', '-march=native', '-fno-wrapv', '-O3'] )]
+                        libraries=['hdf5', 'hdf5_hl', 'hdf5_cpp', 'tbb'],
+                        extra_compile_args = ['-std=c++20', '-pthread', '-march=native', '-fno-wrapv', '-O3'],
+                        extra_link_args =['-ltbb'])
+                        
 
 os.environ["CC"] = ("clang++")
 setup(
