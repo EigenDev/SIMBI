@@ -34,6 +34,9 @@ namespace simbi
         std::vector<double> lorentz_gamma, xvertices, yvertices;
         CLattice coord_lattice;
 
+        /* Experimental parallelization utilities */
+        std::vector<int> ip, jp, igp, jgp;
+
         /* Methods */
         SRHD2D();
         SRHD2D(std::vector<std::vector<double>> state2D, int NX, int NY, double gamma, std::vector<double> x1,
