@@ -14,7 +14,6 @@
 #define CLATTICE_H
 
 #include <vector> 
-#include <array> 
 #include "config.h"
 namespace simbi {
 
