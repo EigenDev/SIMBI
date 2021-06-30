@@ -14,8 +14,8 @@ with open("README.md", "r", encoding = "utf-8") as fh:
     description = fh.read()
 
 compiler_args = ['-std=c++17', '-march=native', '-fno-wrapv', '-O3']
-linker_args   = ['-lhdf5', '-lhdf5_cpp']
-libraries     = ['hdf5', 'hdf5_cpp']
+linker_args   = ['-lhdf5', '-lhdf5_cpp', '-ltbb']
+libraries     = ['hdf5', 'hdf5_cpp', 'tbb']
 library_dirs  = []
 language = "c++"
 sources  = ["src/state.pyx"]
