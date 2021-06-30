@@ -1,11 +1,11 @@
 plots/
-__pycache__/
+simbi_py/__pycache__/
 SIMBI_2D_Hydro_Code.egg-info/
 build/
 data/
 tests/
 science/
-src/ustate.h
+src/state.cpp
 test.cpp
 ustate
 .vscode/
