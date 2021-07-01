@@ -78,6 +78,7 @@ vector<Primitive> SRHD2D::cons2prim2D(const vector<Conserved> &u_state2D)
 
     int iter = 0;
     int maximum_iteration = 50;
+    // #pragma omp parallel for num_threads(2) tile sizes(8,8) schedule(static)
     for (int jj = 0; jj < NY; jj++)
     {
         for (int ii = 0; ii < NX; ii++)
@@ -1053,6 +1054,7 @@ vector<Conserved> SRHD2D::u_dot2D(const vector<Conserved> &u_state)
 
             // Left/Right artificial viscosity
             Conserved favl, favr;
+            #
             for (int jj = j_start; jj < j_bound; jj++)
             {
                 ycoordinate = jj - 2;
@@ -1403,7 +1405,7 @@ vector<vector<double>> SRHD2D::simulate2D(
     bool hllc = false)
 {
 
-    int i_real, j_real;
+    // int i_real, j_real;
     string tnow, tchunk, tstep;
     int total_zones = NX * NY;
 
@@ -1543,10 +1545,10 @@ vector<vector<double>> SRHD2D::simulate2D(
 
             for (int jj = 0; jj < yphysical_grid; jj++)
             {
-                j_real = jj + 1;
+                int j_real = jj + 1;
                 for (int ii = 0; ii < xphysical_grid; ii++)
                 {
-                    i_real = ii + 1;
+                    int i_real = ii + 1;
                     u_p[i_real + NX * j_real] =
                         u[i_real + NX * j_real] + udot[ii + xphysical_grid * jj] * dt;
                 }
@@ -1579,6 +1581,7 @@ vector<vector<double>> SRHD2D::simulate2D(
         tchunk = "000000";
         int tchunk_order_of_mag = 2;
         int time_order_of_mag, num_zeros;
+        int ii, jj, x, y;
         while (t < tend)
         {
             /* Compute the loop execution time */
@@ -1586,41 +1589,38 @@ vector<vector<double>> SRHD2D::simulate2D(
 
             udot = u_dot2D(u);
 
-            for (int jj = 0; jj < yphysical_grid; jj+=block_size)
+            
+            #pragma omp parallel num_threads(2) tile sizes(8,8)
             {
-                for (int ii = 0; ii < xphysical_grid; ii+=block_size)
+                
+                #pragma omp for schedule(static)
+                for (jj = 0; jj < yphysical_grid; jj++)
                 {
-                    for(int y = jj; y < std::min(jj + block_size, yphysical_grid); y++){
-                        j_real = y + 2;
-                        for(int x = ii; x < std::min(ii + block_size, xphysical_grid); x++){
-                            i_real = x + 2;
-                            u1[i_real + NX * j_real] 
-                                = u[i_real + NX * j_real] + udot[x + xphysical_grid * y] * dt;
-                        }
+                    int j_real = jj + 2;
+                    for (ii = 0; ii < xphysical_grid; ii++)
+                    {
+                        int i_real = ii + 2;
+                        u1[i_real + NX * j_real] 
+                            = u[i_real + NX * j_real] + udot[ii + xphysical_grid * jj] * dt;
+
                     }
                 }
-            }
 
-            config_ghosts2D(u1, NX, NY, false);
-            prims = cons2prim2D(u1);
-            udot  = u_dot2D(u1);
+                config_ghosts2D(u1, NX, NY, false);
+                prims = cons2prim2D(u1);
+                udot  = u_dot2D(u1);
 
-            for (int jj = 0; jj < yphysical_grid; jj+= block_size)
-            {
-                j_real = jj + 2;
-                for (int ii = 0; ii < xphysical_grid; ii+= block_size)
+                #pragma omp for schedule(static)
+                for (jj = 0; jj < yphysical_grid; jj++)
                 {
-                    for(int y = jj; y < std::min(jj + block_size, yphysical_grid); y++){
-                        j_real = y + 2;
-                        for(int x = ii; x < std::min(ii + block_size, xphysical_grid); x++){
-                            i_real = x + 2;
-                            // i_real = ii + 2;
-                            u2[i_real + NX * j_real] =  u [i_real + NX * j_real] * 0.5 +
-                                                        u1[i_real + NX * j_real] * 0.5 +
-                                                        udot[x + xphysical_grid * y] * 0.5 * dt;
-                        }
+                    int j_real = jj + 2;
+                    for (ii = 0; ii < xphysical_grid; ii++)
+                    {
+                        int i_real = ii + 2;
+                        u2[i_real + NX * j_real] =  u [i_real + NX * j_real] * 0.5 +
+                                                    u1[i_real + NX * j_real] * 0.5 +
+                                                    udot[ii + xphysical_grid * jj] * 0.5 * dt;
                     }
-                    
                 }
             }
 

@@ -13,8 +13,8 @@ from Cython.Build import cythonize
 with open("README.md", "r", encoding = "utf-8") as fh:
     description = fh.read()
 
-compiler_args = ['-std=c++17', '-march=native', '-fno-wrapv', '-O3']
-linker_args   = ['-lhdf5', '-lhdf5_cpp']
+compiler_args = ['-std=c++17', '-march=native', '-fno-wrapv', '-O3', '-fopenmp']
+linker_args   = ['-lhdf5', '-lhdf5_cpp', '-fopenmp']
 libraries     = ['hdf5', 'hdf5_cpp']
 library_dirs  = []
 language = "c++"
