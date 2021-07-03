@@ -60,6 +60,7 @@ void SRHD::cons2prim1D(const std::vector<Conserved> &u_state)
     double eps, rhos, p, v2, et, c2;
     int iter = 0;
 
+    // #pragma omp parallel for num_threads(2)
     for (int ii = 0; ii < Nx; ii++)
     {
         D   = u_state[ii].D;
@@ -712,6 +713,8 @@ SRHD::calc_hllc_flux(const Primitive &left_prims, const Primitive &right_prims,
                     return L;
                 } else {
                     Primitive left_most, right_most, left_mid, right_mid, center;
+
+                    // #pragma omp parallel for num_threads(2)
                     for (int ii = i_start; ii < i_bound; ii++)
                     {
                         if (periodic)
@@ -1003,6 +1006,10 @@ SRHD::calc_hllc_flux(const Primitive &left_prims, const Primitive &right_prims,
         }
         else
         {
+            #pragma omp declare reduction(vec_float_plus : std::vector<Conserved> : \
+            std::transform(omp_out.begin(), omp_out.end(), omp_in.begin(), omp_out.begin(), std::plus<Conserved>())) \
+            initializer(omp_priv = decltype(omp_orig)(omp_orig.size()))
+
             tchunk = "000000";
             int tchunk_order_of_mag = 2;
             int time_order_of_mag, num_zeros;
@@ -1020,15 +1027,12 @@ SRHD::calc_hllc_flux(const Primitive &left_prims, const Primitive &right_prims,
 
                 udot = u_dot1D(u);
                 
-                #pragma omp parallel for
+                // #pragma omp parallel for num_threads(2)
                 for (ii = 0; ii < pgrid_size; ii++)
                 {
                     i_real = ii + idx_shift;
                     u1[i_real] += udot[ii] * dt;
                 }
-
-                // std::cout << "Loop Completed" << "\n";
-                // std::cin.get();
 
                 // Readjust the ghost cells at i-2,i-1,i+1,i+2
                 if (periodic == false)
@@ -1039,7 +1043,7 @@ SRHD::calc_hllc_flux(const Primitive &left_prims, const Primitive &right_prims,
                 cons2prim1D(u1);
                 udot1 = u_dot1D(u1);
 
-                // #pragma omp parallel for 
+                // #pragma omp parallel for num_threads(2)
                 for (int ii = 0; ii < pgrid_size; ii++)
                 {
                     i_real     = ii + idx_shift;
