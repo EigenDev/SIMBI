@@ -65,12 +65,12 @@ def extensions():
     sysconfig.get_config_vars()['OPT'] = ''
     sysconfig.get_config_vars()['PY_CFLAGS'] = ''
     sysconfig.get_config_vars()['PY_CORE_CFLAGS'] = ''
-    sysconfig.get_config_vars()['CC'] = 'clang'
-    sysconfig.get_config_vars()['CXX'] = 'clang++'
+    sysconfig.get_config_vars()['CC'] = 'gcc'
+    sysconfig.get_config_vars()['CXX'] = 'g++'
     sysconfig.get_config_vars()['BASECFLAGS'] = ''
     sysconfig.get_config_vars()['CCSHARED'] = '-fPIC'
-    sysconfig.get_config_vars()['LDSHARED'] = 'clang -shared'
-    sysconfig.get_config_vars()['CPP'] = 'clang++'
+    sysconfig.get_config_vars()['LDSHARED'] = 'gcc -shared'
+    sysconfig.get_config_vars()['CPP'] = 'g++'
     sysconfig.get_config_vars()['CPPFLAGS'] = ''
     sysconfig.get_config_vars()['BLDSHARED'] = ''
     sysconfig.get_config_vars()['CONFIGURE_LDFLAGS'] = ''
@@ -82,8 +82,8 @@ def extensions():
     )
     
 # set the compiler
-os.environ["CC"]  = "clang++"
-os.environ["CXX"] = "clang++"
+os.environ["CC"]  = "g++"
+os.environ["CXX"] = "g++"
 setup(
     name="SIMBI 2D Hydro Code",
     version="0.0.1",
