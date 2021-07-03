@@ -993,7 +993,8 @@ SRHD::calc_hllc_flux(const Primitive &left_prims, const Primitive &right_prims,
             tchunk = "000000";
             int tchunk_order_of_mag = 2;
             int time_order_of_mag, num_zeros;
-
+            int ii;
+            int real; 
             u1 = u;
             u2 = u;
             u_p = u;
@@ -1007,12 +1008,16 @@ SRHD::calc_hllc_flux(const Primitive &left_prims, const Primitive &right_prims,
                 }
 
                 udot = u_dot1D(u);
-
-                for (int ii = 0; ii < pgrid_size; ii++)
+                
+                #pragma omp parallel for
+                for (ii = 0; ii < pgrid_size; ii++)
                 {
-                    i_real = ii + idx_shift;
-                    u1[i_real] = u[i_real] + udot[ii] * dt;
+                    real = ii + idx_shift;
+                    u1[real] = u[real] + udot[ii] * dt;
                 }
+
+                // std::cout << "Loop Completed" << "\n";
+                // std::cin.get();
 
                 // Readjust the ghost cells at i-2,i-1,i+1,i+2
                 if (periodic == false)
@@ -1023,6 +1028,7 @@ SRHD::calc_hllc_flux(const Primitive &left_prims, const Primitive &right_prims,
                 cons2prim1D(u1);
                 udot = u_dot1D(u1);
 
+                // #pragma omp parallel for 
                 for (int ii = 0; ii < pgrid_size; ii++)
                 {
                     i_real = ii + idx_shift;

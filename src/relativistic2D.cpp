@@ -1051,10 +1051,10 @@ vector<Conserved> SRHD2D::u_dot2D(const vector<Conserved> &u_state)
             bool zero_flux_north     = false;
             bool zero_flux_south     = false;
             auto null_flux = Conserved{0.0, 0.0, 0.0, 0.0};
-
+            int realid;
             // Left/Right artificial viscosity
             Conserved favl, favr;
-            #
+            // #pragma omp parallel for tile sizes(4,4) schedule(static)
             for (int jj = j_start; jj < j_bound; jj++)
             {
                 ycoordinate = jj - 2;
@@ -1089,6 +1089,7 @@ vector<Conserved> SRHD2D::u_dot2D(const vector<Conserved> &u_state)
 
                         /* TODO: Fix this */
                     }
+                    realid = ycoordinate * xphysical_grid + xcoordinate;
                     // Reconstructed left X Primitive vector at the i+1/2 interface
                     xprims_l.rho =
                         center.rho + 0.5 * minmod(theta * (center.rho - xleft_mid.rho),
@@ -1353,7 +1354,8 @@ vector<Conserved> SRHD2D::u_dot2D(const vector<Conserved> &u_state)
                     deltaV1        = coord_lattice.dV1[xcoordinate];
                     deltaV2        = volAvg * coord_lattice.dV2[ycoordinate];
 
-                    L.push_back(Conserved{
+                    // #pragma omp critical
+                    L[realid] = Conserved{
                         // L(D)
                         -(f1.D * right_rsurface - f2.D * left_rsurface) / deltaV1 
                             - (g1.D * upper_tsurface - g2.D * lower_tsurface) / deltaV2 
@@ -1375,7 +1377,7 @@ vector<Conserved> SRHD2D::u_dot2D(const vector<Conserved> &u_state)
                         -(f1.tau * right_rsurface - f2.tau * left_rsurface) / deltaV1 
                             - (g1.tau * upper_tsurface - g2.tau * lower_tsurface) / deltaV2
                                 + source_tau[xcoordinate + xphysical_grid * ycoordinate] * decay_const
-                                    });
+                                    };
                 }
             }
         }
@@ -1590,10 +1592,10 @@ vector<vector<double>> SRHD2D::simulate2D(
             udot = u_dot2D(u);
 
             
-            #pragma omp parallel num_threads(2) tile sizes(8,8)
+            // #pragma omp parallel num_threads(2) tile sizes(8,8)
             {
                 
-                #pragma omp for schedule(static)
+                // #pragma omp for schedule(static)
                 for (jj = 0; jj < yphysical_grid; jj++)
                 {
                     int j_real = jj + 2;
@@ -1610,7 +1612,7 @@ vector<vector<double>> SRHD2D::simulate2D(
                 prims = cons2prim2D(u1);
                 udot  = u_dot2D(u1);
 
-                #pragma omp for schedule(static)
+                // #pragma omp for schedule(static)
                 for (jj = 0; jj < yphysical_grid; jj++)
                 {
                     int j_real = jj + 2;
