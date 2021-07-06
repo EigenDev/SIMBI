@@ -929,6 +929,7 @@ SRHD::calc_hllc_flux(const Primitive &left_prims, const Primitive &right_prims,
         u.resize(Nx);
         prims.resize(Nx);
         pressure_guess.resize(Nx);
+        udot.resize(pgrid_size);
         // Copy the state array into real & profile variables
         for (size_t ii = 0; ii < Nx; ii++)
         {
@@ -1006,8 +1007,8 @@ SRHD::calc_hllc_flux(const Primitive &left_prims, const Primitive &right_prims,
         }
         else
         {
-            #pragma omp declare reduction(vec_float_plus : std::vector<Conserved> : \
-            std::transform(omp_out.begin(), omp_out.end(), omp_in.begin(), omp_out.begin(), std::plus<Conserved>())) \
+            #pragma omp declare reduction(advance : std::vector<Conserved> : \
+            std::transform(omp_out.begin() + 2, omp_out.begin() + 2 + omp_in.size() - 2, omp_in.begin(), omp_out.begin() + 2, std::plus<Conserved>())) \
             initializer(omp_priv = decltype(omp_orig)(omp_orig.size()))
 
             tchunk = "000000";
@@ -1026,8 +1027,8 @@ SRHD::calc_hllc_flux(const Primitive &left_prims, const Primitive &right_prims,
                 }
 
                 udot = u_dot1D(u);
-                
-                // #pragma omp parallel for num_threads(2)
+
+                #pragma omp parallel for num_threads(2) reduction(advance: u1)
                 for (ii = 0; ii < pgrid_size; ii++)
                 {
                     i_real = ii + idx_shift;
@@ -1043,7 +1044,7 @@ SRHD::calc_hllc_flux(const Primitive &left_prims, const Primitive &right_prims,
                 cons2prim1D(u1);
                 udot1 = u_dot1D(u1);
 
-                // #pragma omp parallel for num_threads(2)
+                #pragma omp parallel for num_threads(2)
                 for (int ii = 0; ii < pgrid_size; ii++)
                 {
                     i_real     = ii + idx_shift;
